@@ -74,21 +74,60 @@ hard way (see `AGENTS.md` for the details):
 
 ```sh
 ./gradlew assembleDebug      # app/build/outputs/apk/debug/app-debug.apk
-./gradlew assembleRelease    # app/build/outputs/apk/release/app-release-unsigned.apk
+./gradlew assembleRelease    # signed with keystore.properties, see below
 ```
 
-The release APK is unsigned: add a `signingConfig` to `app/build.gradle.kts` or
-sign it with `apksigner`. `local.properties` must point at the SDK
-(`sdk.dir=/path/to/Android/Sdk`), or `ANDROID_HOME` has to be set.
+`local.properties` must point at the SDK (`sdk.dir=/path/to/Android/Sdk`), or
+`ANDROID_HOME` has to be set.
+
+Release builds are signed with the key described in `keystore.properties`
+(gitignored, points at `~/.config/wifi-notifier/release.keystore`). Without that
+file the release APK is simply left unsigned and the build still succeeds, which
+is what a fresh clone and F-Droid's own build server produce.
 
 ## Installing
 
+Straight from the APK:
+
 ```sh
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 
 Then tap the launcher icon and allow the three permission prompts. The ongoing
 notification appears immediately and already shows the current network.
+
+### From F-Droid
+
+The app is published to a personal F-Droid repository served by GitHub Pages:
+
+1. In the F-Droid client: **Settings → Repositories → Add repository**, enter
+
+   ```
+   https://1buran.github.io/wifi-notifier/repo
+   ```
+
+   and confirm the fingerprint shown by the client. The index is signed with the
+   `fdroid` key of the release keystore:
+
+   ```
+   SHA-256 3D:BC:FB:C0:E4:BC:36:01:E4:50:8A:96:01:E6:51:10
+           38:7E:F3:1E:D6:87:BA:1D:E5:A5:16:2D:46:82:28:0C
+   ```
+
+2. Search for **Wi-Fi Notifier** in F-Droid, install it and let F-Droid handle
+   the updates.
+
+The repository is rebuilt with `tools/publish-fdroid.sh`: it builds the signed
+release APK, regenerates the index with `fdroidserver` and pushes the result to
+the `gh-pages` branch. The branch is generated output — never edit it by hand.
+
+Two caveats:
+
+- GitHub Pages has to be enabled once in the repository settings
+  (**Settings → Pages → Deploy from a branch → `gh-pages` → `/ (root)`**).
+- F-Droid signs the builds of the *official* repository with its own key, so
+  moving between this repository and the official one means uninstalling the app
+  first: Android refuses to update an app whose signature changed.
 
 ## Project layout
 
@@ -104,6 +143,14 @@ app/src/main/
     ├── drawable/ic_stat_wifi.xml       notification icon
     └── mipmap-anydpi-v26/              adaptive launcher icon
 docs/notifications.png                  the screenshot above
+fastlane/metadata/android/en-US/        F-Droid listing: title, descriptions,
+                                        changelog and screenshots
+fdroid/
+├── metadata/com.buran.wifinotifier.yml the build recipe (ready for a merge
+│                                       request to the official fdroiddata)
+├── categories.yml                      names of the categories in the index
+└── repo-icon.svg, repo-icon.png         the repository icon
+tools/publish-fdroid.sh                 builds, re-indexes and publishes
 ```
 
 ## Limitations

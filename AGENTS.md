@@ -223,6 +223,94 @@ Two habits that save time here:
 - `docs/` — images referenced by the README. `docs/notifications.png` is a real
   screenshot of the notification shade; re-take it from the emulator when the
   notification layout or its text changes.
+- `fastlane/metadata/android/en-US/` — the F-Droid listing: title, short and full
+  description, `changelogs/<versionCode>.txt` and
+  `images/phoneScreenshots/*.png`. Add a changelog file for every new
+  `versionCode`, or the store entry keeps showing the previous one.
+
+## Release and publishing
+
+The app ships through a self-hosted F-Droid repository served by GitHub Pages,
+not through the official one: `https://1buran.github.io/wifi-notifier/repo`.
+
+### Keys
+
+Both signing keys live in `~/.config/wifi-notifier/` and must never enter the
+git tree:
+
+| File | Alias | Signs |
+| --- | --- | --- |
+| `release.keystore` | `wifi-notifier` | the release APK (Gradle reads it through `keystore.properties`) |
+| `release.keystore` | `fdroid` | the repository index (fdroidserver reads it through the generated `config.yml`) |
+
+- `keystore.properties` in the project root is gitignored and holds the store
+  path and the passwords; it is the only thing Gradle needs.
+- The build must keep working **without** those files: `app/build.gradle.kts`
+  only creates the `release` signing config when `keystore.properties` exists,
+  so a fresh clone and F-Droid's build server get an unsigned APK instead of
+  a failure. Do not make the signing config mandatory.
+- Both aliases share one keystore because fdroidserver expects a single
+  `keystore` per configuration, with `keyalias` for the app and `repo_keyalias`
+  for the index.
+- Back these files up: losing the keystore means the published app can never be
+  updated, only reinstalled.
+
+### Versioning
+
+- `versionName` must equal the git tag without the `v` (`v1.0.0` → `1.0.0`),
+  because the metadata uses `UpdateCheckMode: Tags` with
+  `AutoUpdateMode: Version` and the updater compares the two.
+- `versionCode` must strictly increase with every published build: F-Droid
+  refuses two versions with the same code.
+- Release procedure: bump `versionCode` (and `versionName` when the version
+  changes), add `fastlane/.../changelogs/<versionCode>.txt`, add a `Builds`
+  entry to the metadata for the official-track record, commit, tag `vX.Y.Z`,
+  push the tag, then run the publish script.
+
+### Publishing
+
+```sh
+tools/publish-fdroid.sh              # build, re-index, push gh-pages
+tools/publish-fdroid.sh --no-push    # same, but stop before the git step
+```
+
+The script keeps everything outside the repository: the fdroidserver workdir is
+`~/.cache/wifi-notifier-fdroid` (its `config.yml` contains the password), and
+only the resulting `repo/` directory is pushed, to the `gh-pages` branch.
+`gh-pages` is generated output: never edit it by hand, and never move the
+repository's files into `main`.
+
+GitHub Pages serves the `gh-pages` branch (source: branch `gh-pages`, folder
+`/ (root)`, enabled once in the repository settings). The client URL is the
+`repo/` subdirectory of the site, which is why `repo_url` in the config ends
+with `/repo`.
+
+### fdroidserver notes
+
+Learned the hard way, with fdroidserver 2.4.5:
+
+- `repo_url` **must** end with `/repo`, otherwise `fdroid update` refuses to
+  start.
+- `repo_icon` is a bare file name, not a path: fdroidserver looks for that file
+  in the workdir root and copies it to `repo/icons/` itself. Putting the icon
+  straight into `repo/icons/` results in a generated placeholder instead.
+- Categories are read from `config/<locale>/categories.yml` with plain string
+  values. A file at `config/categories.yml` with nested `name: {en: ...}` maps
+  produces a doubly nested entry in the index, and lint calls the categories
+  invalid.
+- `Metadata: fastlane` is **not** a valid app field in this version: fdroidserver
+  picks `fastlane/metadata/android/<locale>/` up from the source tree on its own.
+  The listing is additionally fed in through the classic
+  `metadata/<id>/<locale>/` layout by the publish script.
+- `fdroid lint` inside the workdir must report nothing before pushing.
+- A warning "category defined but not used by any app" appears on every run even
+  though the app lists both categories; the generated index is correct, so it is
+  noise, not a failure.
+
+Verification after publishing: `git ls-tree -r origin/gh-pages` lists the APK,
+`index-v1.jar` and `index-v2.json`, and the fingerprint printed by the client
+must match `3D:BC:FB:C0:E4:BC:36:01:E4:50:8A:96:01:E6:51:10:38:7E:F3:1E:D6:87:BA:1D:E5:A5:16:2D:46:82:28:0C`
+(the `fdroid` alias of the release keystore).
 
 ## Commit & Pull Request Guidelines
 
