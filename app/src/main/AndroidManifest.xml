@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Network state and Wi-Fi data -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!--
+        NEARBY_WIFI_DEVICES is the main permission for reading the network name
+        on Android 13+. The neverForLocation flag is deliberately NOT set:
+        with it the system strips the SSID out of the response.
+    -->
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+
+    <!--
+        Fallback for devices and firmware builds that hand out the SSID only
+        when the location permission is granted.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+    <!-- Notifications (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+        The background service that watches the connections.
+
+        The location type is required by design: the system treats the Wi-Fi
+        network name as location data, and a "while in use" location permission
+        keeps working for a background service only when that service is
+        declared as a location service. The specialUse type is kept as
+        a fallback for the case when a location service cannot be started.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Translucent.NoTitleBar">
+
+        <!--
+            The app has no screen: the activity only asks for the permissions
+            once, starts the service and closes itself.
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".WifiWatchService"
+            android:exported="false"
+            android:foregroundServiceType="location|specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="monitors Wi-Fi connectivity to report the name of the network the device is connected to" />
+        </service>
+    </application>
+
+</manifest>

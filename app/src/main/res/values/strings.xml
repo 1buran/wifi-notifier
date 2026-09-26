@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Wi-Fi Notifier</string>
+
+    <string name="channel_current_name">Current network</string>
+    <string name="channel_current_desc">Ongoing notification with the name of the network the phone is connected to</string>
+    <string name="channel_events_name">Wi-Fi connections</string>
+    <string name="channel_events_desc">Notification posted when the phone joins a new Wi-Fi network</string>
+
+    <string name="ongoing_title">Wi-Fi</string>
+    <string name="state_detecting">Detecting the network…</string>
+    <string name="state_disconnected">Not connected to Wi-Fi</string>
+    <string name="state_no_permission">No access to the network name — grant the app permissions and enable location</string>
+    <string name="state_connected">Connected: %1$s</string>
+
+    <string name="action_stop">Stop</string>
+    <string name="event_title">Wi-Fi connected</string>
+
+    <string name="toast_started">Watching Wi-Fi: notifications are on</string>
+    <string name="toast_no_permission">Without the location permission the Wi-Fi network name may be unavailable</string>
+</resources>
