@@ -92,14 +92,40 @@ error.
   mobile data with a Wi-Fi network joined alongside it, and an emulator reports
   its virtual Wi-Fi exactly that way: `getNetworkCapabilities(activeNetwork)`
   has `TRANSPORT_WIFI == false` while `WifiManager.getConnectionInfo()` returns a
-  perfectly good `"AndroidWifi"`. Hence the three sources in
-  `WifiSsid.current()`: active network, callback-reported networks, then
-  `WifiManager`. The `WifiManager` path must keep its
-  `SupplicantState.COMPLETED` check, otherwise a stale SSID is reported after a
-  disconnect.
+  perfectly good `"AndroidWifi"`. Hence the sources in
+  `WifiSsid.readableSsid()` (active network, then `WifiManager`) plus the
+  callback-reported networks the service keeps. The `WifiManager` path must keep
+  its `SupplicantState.COMPLETED` check, otherwise a stale SSID is reported after
+  a disconnect.
+- **A name read once is remembered while the network stays.** Turning location
+  services off after the name was read makes the system redact it again, and the
+  app must keep showing the name instead of flipping to "hidden" — that is the
+  point of the feature. The name therefore has to be remembered from *every*
+  successful read, not only from `onCapabilitiesChanged`: on the emulator the
+  callback's capabilities carry no usable SSID at all (`transportInfo` is null
+  or redacted), and the only working source is `WifiManager` through
+  `WifiSsid.readableSsid()`. A remembered name is keyed by the `Network` object
+  and dropped only on `onLost` (plus lazily when the network stops being a live
+  Wi-Fi one), so moving to another network asks for the name again.
+- **The remembered name must be tied to the right network.** `readableSsid()`
+  returns a bare string, so `rememberName()` picks the identity: the active
+  network when it is Wi-Fi, otherwise the single live Wi-Fi network the callbacks
+  report. Without that step the map would be empty on an emulator and the
+  "remember while connected" behaviour would silently do nothing.
+- **`refresh()` is `@Synchronized` on purpose.** The 20-second poller runs on the
+  main thread while connectivity callbacks arrive on binder threads; two
+  overlapping refreshes both compare against the same stale `permissionSnapshot`
+  and re-register the callback (and repost the notification) twice.
 - **Do not use `ConnectivityManager.getAllNetworks()`** — deprecated in API 36.
   Use the networks delivered to the `NetworkCallback` and validate them with
   `getNetworkCapabilities(network)`, which is not deprecated.
+- **The notification action must match the diagnosis.** The system location
+  switch is its own settings screen (`ACTION_LOCATION_SOURCE_SETTINGS`), every
+  permission problem goes to the app's permission screen
+  (`ACTION_APPLICATION_DETAILS_SETTINGS`). Feeding the two through one
+  `Permissions.Fix` value keeps the text and the action in step; a single
+  generic "Permissions" button sends the user to the wrong screen for the
+  location-switch case.
 - **Do not call `finish()` before the permission result arrives**, and do not set
   `android:noHistory="true"` on the activity: the activity would be finished
   while the permission dialog is up and `onRequestPermissionsResult` would never

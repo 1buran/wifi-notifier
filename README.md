@@ -13,7 +13,7 @@ Two notifications, two different reasons to exist:
 
 | Notification | Channel | What it shows |
 | --- | --- | --- |
-| **Current network** | `Current network`, silent | The network the phone is on right now, updated on every change, with a `Stop` action that shuts the watcher down |
+| **Current network** | `Current network`, silent | The network the phone is on right now, updated on every change, with a `Stop` action that shuts the watcher down. When the name is hidden it also carries an action that opens the screen where it can be unhidden (see below) |
 | **Wi-Fi connected** | `Wi-Fi connections`, alerting | Posted the moment the phone joins a network, with the network name as its text |
 
 The watcher survives the app being swiped away: it runs as a foreground service,
@@ -46,7 +46,7 @@ launcher --> MainActivity (no UI, translucent theme)
                 |  NetworkCallback for TRANSPORT_WIFI  -- events
                 |  20 s poll                            -- safety net
                 v
-             WifiSsid.current(context)  --> "Connected: <name>" | "Not connected"
+             WifiSsid.readableSsid(context)  --> "Connected: <name>" | "Not connected"
 ```
 
 Three things about that picture are load-bearing, and all three were found the
@@ -164,19 +164,25 @@ tools/publish-fdroid.sh                 builds, re-indexes and publishes
 Android hands out the name of the connected network only to an app that holds
 the *precise* location permission: "nearby Wi-Fi devices" alone is not enough on
 most builds, and "approximate" location is not either. The app says so instead of
-pretending there is no connection, and the `Permissions` action in the
-notification opens the screen where it can be fixed.
+pretending there is no connection, and the notification carries one action that
+opens the screen where it can be fixed — the right screen for the case at hand.
 
-| What the notification says | What to do |
-| --- | --- |
-| "grant the location permission" | Give the app location access |
-| "switch the location permission from approximate to precise" | App info → Permissions → Location → **Precise** |
-| "turn location services on" | Turn the system location toggle on |
+| What the notification says | Action | What to do |
+| --- | --- | --- |
+| "grant the location permission" | `Permissions` | Give the app location access |
+| "switch the location permission from approximate to precise" | `Permissions` | App info → Permissions → Location → **Precise** |
+| "turn the system location switch on" | `Location` | Flip the switch on that screen |
 
 The watcher picks the change up on its own within twenty seconds, without a
 restart: the foreground service type has to be `location` for the system to hand
 the name over, and while the permission is missing the system refuses to start
 that type at all, so the app retries it as soon as the permission appears.
+
+Once a name has been read, the app keeps showing it while the phone stays on that
+network, even if location is switched off again afterwards — the name is not
+forgotten just because the system stops repeating it. Joining a different network
+while the name is unreadable asks for the switch again, because that name was
+never read.
 
 ## Limitations
 

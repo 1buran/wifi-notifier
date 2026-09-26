@@ -6,16 +6,18 @@ import android.content.pm.PackageManager
 import android.location.LocationManager
 
 /**
- * Everything the app knows about the permissions the network name depends on.
+ * Everything the app knows about the state the network name depends on.
  *
- * Android hides the SSID behind a "nearby Wi-Fi devices" permission plus,
- * in practice, location: the exact location permission on most builds, the
- * approximate one is not enough. When someone picks "approximate" in the
- * system dialog the app still has a location permission, so nothing looks
- * broken — but the name stays hidden. That case has to be recognised and
- * explained, which is what the hint below is for.
+ * Android hides the SSID behind a "nearby Wi-Fi devices" permission plus, in
+ * practice, precise location with location services turned on. The app cannot
+ * switch location services on by itself — no API for that exists since
+ * Android 4.4 — so the best it can do is name the exact thing that is missing
+ * and offer a shortcut to the screen where it can be changed.
  */
 internal object Permissions {
+
+    /** What stands between the app and the network name. */
+    enum class Fix { LOCATION_SERVICES, PRECISE_LOCATION, LOCATION_PERMISSION, UNKNOWN }
 
     fun isGranted(context: Context, permission: String): Boolean =
         context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
@@ -39,15 +41,29 @@ internal object Permissions {
     )
 
     /**
-     * What the user has to change to see the network name, as a string resource.
-     * Only meaningful when Wi-Fi is joined but the system hides the SSID.
+     * What the user has to change to see the network name.
+     *
+     * The order matters: with any location permission at all the system switch
+     * comes first (without it nothing is readable), then the precise/approximate
+     * choice, then the permission itself.
      */
-    fun hiddenSsidHint(context: Context): Int = when {
-        !isLocationEnabled(context) -> R.string.hint_location_services
-        !isGranted(context, Manifest.permission.ACCESS_FINE_LOCATION) &&
-            isGranted(context, Manifest.permission.ACCESS_COARSE_LOCATION) -> R.string.hint_precise_location
-        !isGranted(context, Manifest.permission.ACCESS_FINE_LOCATION) -> R.string.hint_location_permission
-        else -> R.string.hint_ssid_unavailable
+    fun fixForHiddenName(context: Context): Fix {
+        val precise = isGranted(context, Manifest.permission.ACCESS_FINE_LOCATION)
+        val approximate = isGranted(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+
+        return when {
+            (precise || approximate) && !isLocationEnabled(context) -> Fix.LOCATION_SERVICES
+            approximate && !precise -> Fix.PRECISE_LOCATION
+            !precise -> Fix.LOCATION_PERMISSION
+            else -> Fix.UNKNOWN
+        }
+    }
+
+    fun hintRes(fix: Fix): Int = when (fix) {
+        Fix.LOCATION_SERVICES -> R.string.hint_location_services
+        Fix.PRECISE_LOCATION -> R.string.hint_precise_location
+        Fix.LOCATION_PERMISSION -> R.string.hint_location_permission
+        Fix.UNKNOWN -> R.string.hint_ssid_unavailable
     }
 
     /**

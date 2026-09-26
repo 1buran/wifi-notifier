@@ -1,0 +1,11 @@
+One tap from the notification to the screen that unhides the network name.
+
+* When the network name is hidden because the system location switch is off,
+  the notification now carries a Location action: it opens that screen, and
+  the app picks the name up on its own once the switch is on.
+* The name of the network you are on is remembered while you stay on it:
+  turning location off after the name was read no longer replaces it with
+  "name hidden". Joining another network asks for the switch again, because
+  that name was never read.
+* The Permissions action stays for the permission-related cases (location not
+  granted, or granted as approximate instead of precise).

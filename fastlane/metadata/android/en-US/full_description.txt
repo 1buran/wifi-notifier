@@ -5,12 +5,15 @@ in the notification shade.
 Two notifications:
 
 * a silent ongoing one that always shows the network the phone is on right now,
-  with a Stop action that shuts the watcher down;
+  with a Stop action that shuts the watcher down. If the name is hidden, it also
+  carries one tap straight to the screen that unhides it;
 * an alerting one, posted the moment the phone joins a network, with the name
   of that network as its text.
 
 Reconnecting to a network you left alerts again; a system-initiated restart of
-the app does not send a duplicate.
+the app does not send a duplicate. Once a name has been read, the app keeps
+showing it while you stay on that network, even if location is switched off
+afterwards; joining another network asks for the switch again.
 
 On the first launch the app asks for three permissions: notifications, nearby
 Wi-Fi devices and location. Location is not used to determine your position:

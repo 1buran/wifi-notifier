@@ -19,6 +19,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
 import android.util.Log
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -51,13 +52,30 @@ class WifiWatchService : Service() {
      */
     private var permissionSnapshot: String? = null
 
-    /** Wi-Fi networks the system currently reports as connected. */
-    private val wifiNetworks = ConcurrentHashMap<Network, String>()
+    /**
+     * The Wi-Fi networks the connectivity callbacks currently report, whether
+     * or not their names are readable. The [Network] object is the identity the
+     * system uses to say when a network has disappeared.
+     */
+    private val wifiNetworks: MutableSet<Network> =
+        Collections.newSetFromMap(ConcurrentHashMap())
 
-    /** The foreground service type that worked, and the text it shows. */
+    /**
+     * The last name read for each reported Wi-Fi network.
+     *
+     * A name is deliberately kept when the system later starts hiding it: that
+     * is what happens when location services are switched off after the name
+     * was read, and dropping the entry there would make the app forget a name
+     * it has already seen. An entry disappears only with the network itself
+     * ([ConnectivityManager.NetworkCallback.onLost]), which is also what
+     * happens when the phone moves to another network.
+     */
+    private val knownNames = ConcurrentHashMap<Network, String>()
+
+    /** The foreground service type that worked, and what the notification shows. */
     private var foregroundType: Int? = null
     private var ongoingText: String? = null
-    private var ongoingHasSettingsAction = false
+    private var ongoingFix: Permissions.Fix? = null
 
     /**
      * Safety net for the case when the system did not deliver a callback,
@@ -98,6 +116,7 @@ class WifiWatchService : Service() {
         callback?.let { runCatching { connectivity.unregisterNetworkCallback(it) } }
         callback = null
         wifiNetworks.clear()
+        knownNames.clear()
         Log.i(TAG, "service stopped")
         super.onDestroy()
     }
@@ -113,17 +132,22 @@ class WifiWatchService : Service() {
 
         val networkCallback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
+                wifiNetworks.add(network)
                 refresh("onAvailable")
             }
 
             override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-                val ssid = WifiSsid.fromCapabilities(caps)
-                if (ssid != null) wifiNetworks[network] = ssid else wifiNetworks.remove(network)
+                wifiNetworks.add(network)
+                // A redacted SSID here means the name is unavailable right now,
+                // not that the network changed: keep the last name read for it
+                // (see knownNames) instead of forgetting it.
+                WifiSsid.fromCapabilities(caps)?.let { knownNames[network] = it }
                 refresh("onCapabilitiesChanged")
             }
 
             override fun onLost(network: Network) {
                 wifiNetworks.remove(network)
+                knownNames.remove(network)
                 refresh("onLost")
             }
         }
@@ -138,6 +162,13 @@ class WifiWatchService : Service() {
             .onFailure { Log.w(TAG, "could not register the network callback", it) }
     }
 
+    /**
+     * Serialized: the poller runs on the main thread while the callbacks arrive
+     * on binder threads, and two overlapping refreshes both compare against the
+     * same stale state, which re-registers the callback twice and updates the
+     * notification twice.
+     */
+    @Synchronized
     private fun refresh(reason: String) {
         val canReadSsid = Permissions.canReadSsid(this)
         val permissionState = Permissions.describe(this)
@@ -151,7 +182,7 @@ class WifiWatchService : Service() {
             // until it is restarted by hand.
             if (foregroundType != FOREGROUND_SERVICE_TYPES.first()) {
                 Log.i(TAG, "retrying the preferred foreground service type")
-                startForegroundWith(ongoingText ?: getString(R.string.state_detecting), ongoingHasSettingsAction)
+                startForegroundWith(ongoingText ?: getString(R.string.state_detecting), ongoingFix)
             }
         }
         permissionSnapshot = permissionState
@@ -185,36 +216,69 @@ class WifiWatchService : Service() {
         alertedSsid = null
         prefs.edit().remove(KEY_LAST_ALERTED).apply()
 
-        val hint = getString(Permissions.hiddenSsidHint(this))
+        val fix = if (associated) Permissions.fixForHiddenName(this) else null
+        val hint = getString(Permissions.hintRes(fix ?: Permissions.Fix.UNKNOWN))
         when (state) {
-            STATE_NO_PERMISSION -> updateOngoing(
-                getString(R.string.state_no_permission, hint),
-                withSettingsAction = true,
-            )
-            STATE_NAME_HIDDEN -> updateOngoing(
-                getString(R.string.state_name_hidden, hint),
-                withSettingsAction = true,
-            )
+            STATE_NO_PERMISSION -> updateOngoing(getString(R.string.state_no_permission, hint), fix)
+            STATE_NAME_HIDDEN -> updateOngoing(getString(R.string.state_name_hidden, hint), fix)
             else -> updateOngoing(getString(R.string.state_disconnected))
         }
     }
 
+    /**
+     * The name of the network the phone is on, or null when it cannot be read.
+     *
+     * A name read earlier is reused for as long as the system keeps reporting
+     * that network: switching location services off after the name was read must
+     * not make the app forget it. Every remembered entry is validated against
+     * the system first, so a network that went away cannot linger here.
+     */
     private fun currentSsid(): String? {
-        WifiSsid.readableSsid(this)?.let { return it }
-        // The active network may be the mobile one while Wi-Fi is joined
-        // alongside it, so we also look at the Wi-Fi networks the callbacks
-        // have reported. Every entry is checked against the system first,
-        // so a network that went away cannot linger here.
-        for ((network, ssid) in wifiNetworks) {
-            val alive = runCatching {
-                connectivity.getNetworkCapabilities(network)
-                    ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
-            }.getOrDefault(false)
-            if (alive) return ssid
-            wifiNetworks.remove(network)
+        WifiSsid.readableSsid(this)?.let { ssid ->
+            rememberName(ssid)
+            return ssid
+        }
+
+        // The name is hidden right now: reuse the last name read for a network
+        // the system still reports. A network that went away is dropped here as
+        // well, so switching to another one cannot resurrect its name.
+        for (network in wifiNetworks) {
+            if (!isLiveWifi(network)) {
+                wifiNetworks.remove(network)
+                knownNames.remove(network)
+                continue
+            }
+            knownNames[network]?.let { return it }
         }
         return null
     }
+
+    /**
+     * Ties a freshly read name to the Wi-Fi network it belongs to, so that it
+     * can be reused while the system keeps hiding the name.
+     *
+     * The name may come from [WifiSsid.readableSsid] instead of a callback: the
+     * active network is not always Wi-Fi (an emulator reports its virtual Wi-Fi
+     * this way, and a phone may sit on mobile data with Wi-Fi joined alongside),
+     * and then the callback-reported Wi-Fi network is the only identity there is.
+     */
+    private fun rememberName(ssid: String) {
+        val active = runCatching { connectivity.activeNetwork }.getOrNull()
+        if (active != null && isLiveWifi(active)) {
+            wifiNetworks.add(active)
+            knownNames[active] = ssid
+            return
+        }
+
+        val candidates = wifiNetworks.filter { isLiveWifi(it) }
+        if (candidates.size == 1) knownNames[candidates.first()] = ssid
+    }
+
+    private fun isLiveWifi(network: Network): Boolean =
+        runCatching {
+            connectivity.getNetworkCapabilities(network)
+                ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        }.getOrDefault(false)
 
     // -------------------------------------------------------------- notifications
 
@@ -256,11 +320,11 @@ class WifiWatchService : Service() {
      * If such a service cannot be started we fall back to specialUse, and the
      * app keeps working while its screen is open.
      */
-    private fun startForegroundWith(text: String, withSettingsAction: Boolean = false) {
+    private fun startForegroundWith(text: String, fix: Permissions.Fix? = null) {
         Log.i(TAG, "ongoing notification: $text")
-        val notification = buildOngoing(text, withSettingsAction)
+        val notification = buildOngoing(text, fix)
         ongoingText = text
-        ongoingHasSettingsAction = withSettingsAction
+        ongoingFix = fix
 
         // The location type is rejected while the user has not granted location
         // at all ("requires any of COARSE/FINE"), and that is an expected state:
@@ -282,10 +346,10 @@ class WifiWatchService : Service() {
         stopSelf()
     }
 
-    private fun updateOngoing(text: String, withSettingsAction: Boolean = false) =
-        startForegroundWith(text, withSettingsAction)
+    private fun updateOngoing(text: String, fix: Permissions.Fix? = null) =
+        startForegroundWith(text, fix)
 
-    private fun buildOngoing(text: String, withSettingsAction: Boolean): Notification =
+    private fun buildOngoing(text: String, fix: Permissions.Fix?): Notification =
         Notification.Builder(this, CHANNEL_CURRENT)
             .setSmallIcon(R.drawable.ic_stat_wifi)
             .setContentTitle(getString(R.string.ongoing_title))
@@ -301,12 +365,32 @@ class WifiWatchService : Service() {
                 ).build()
             )
             .apply {
-                if (withSettingsAction) {
+                // One tap on the body of the notification and one tap on the
+                // action both go to the screen that matches the diagnosis: the
+                // system location switch lives in its own settings screen,
+                // everything else is the app permission screen. Without the
+                // content intent a tap on the body would do nothing, and the
+                // user would have to find and expand the action first.
+                val fixIntent = fix?.let {
+                    if (it == Permissions.Fix.LOCATION_SERVICES) {
+                        locationSettingsPendingIntent()
+                    } else {
+                        appSettingsPendingIntent()
+                    }
+                }
+                if (fixIntent != null) {
+                    setContentIntent(fixIntent)
                     addAction(
                         Notification.Action.Builder(
                             Icon.createWithResource(this@WifiWatchService, R.drawable.ic_stat_wifi),
-                            getString(R.string.action_permissions),
-                            settingsPendingIntent(),
+                            getString(
+                                if (fix == Permissions.Fix.LOCATION_SERVICES) {
+                                    R.string.action_location
+                                } else {
+                                    R.string.action_permissions
+                                }
+                            ),
+                            fixIntent,
                         ).build()
                     )
                 }
@@ -336,7 +420,7 @@ class WifiWatchService : Service() {
     }
 
     /** Opens the system screen where the app permissions can be changed. */
-    private fun settingsPendingIntent(): PendingIntent {
+    private fun appSettingsPendingIntent(): PendingIntent {
         val intent = Intent(
             Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
             Uri.fromParts("package", packageName, null),
@@ -344,6 +428,21 @@ class WifiWatchService : Service() {
         return PendingIntent.getActivity(
             this,
             1,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    /**
+     * Opens the screen with the system location switch. Apps cannot flip that
+     * switch themselves, so this is as close as the notification can get: one
+     * tap, then the watcher picks the name up on its next check.
+     */
+    private fun locationSettingsPendingIntent(): PendingIntent {
+        val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+        return PendingIntent.getActivity(
+            this,
+            2,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

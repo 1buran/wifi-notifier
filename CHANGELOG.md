@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.0.2] - 2026-09-26
+
+### Added
+
+- A `Location` action in the ongoing notification for the case when the missing
+  piece is the system location switch: one tap opens that screen, and the
+  watcher picks the network name up on its own once the switch is back on.
+  The `Permissions` action remains for the permission-related cases.
+- The network name is remembered while the phone stays on the same network:
+  switching location services off after the name was read no longer replaces it
+  with the "name hidden" message. Moving to another network asks for the name
+  again, because its name was never read.
+
+### Fixed
+
+- Two overlapping state checks (the 20-second poller and a connectivity
+  callback) could register the network callback and update the notification
+  twice; the state transition is serialized now.
+- The name read through `WifiManager` (the path an emulator uses, where the
+  active network is not Wi-Fi) is remembered as well, not only the name that
+  arrives with a connectivity callback.
+
 ## [v1.0.1] - 2026-09-26
 
 ### Fixed
@@ -58,6 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   builds the signed APK, regenerates the index with fdroidserver and publishes it
   to the `gh-pages` branch that GitHub Pages serves.
 
-[Unreleased]: https://github.com/1buran/wifi-notifier/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/1buran/wifi-notifier/compare/v1.0.2...HEAD
+[v1.0.2]: https://github.com/1buran/wifi-notifier/releases/tag/v1.0.2
 [v1.0.1]: https://github.com/1buran/wifi-notifier/releases/tag/v1.0.1
 [v1.0.0]: https://github.com/1buran/wifi-notifier/releases/tag/v1.0.0

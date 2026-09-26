@@ -11,16 +11,17 @@
     <string name="state_detecting">Detecting the network…</string>
     <string name="state_disconnected">Not connected to Wi-Fi</string>
     <string name="state_connected">Connected: %1$s</string>
-    <!-- The phone is on a network, but Android keeps its name hidden. -->
-    <string name="state_name_hidden">Wi-Fi is connected, but the network name is hidden — %1$s</string>
-    <string name="state_no_permission">No access to the network name — %1$s</string>
+    <!-- Android keeps the name from the app; the user has to change something. -->
+    <string name="state_name_hidden">Android is not giving the app the network name — %1$s</string>
+    <string name="state_no_permission">The app may not read the network name — %1$s</string>
 
-    <string name="hint_location_services">turn location services on</string>
-    <string name="hint_precise_location">switch the location permission from approximate to precise</string>
+    <string name="hint_location_services">turn the system location switch on</string>
+    <string name="hint_precise_location">change the location permission from approximate to precise</string>
     <string name="hint_location_permission">grant the location permission</string>
-    <string name="hint_ssid_unavailable">the system hides the name of this network</string>
+    <string name="hint_ssid_unavailable">this name cannot be read</string>
 
     <string name="action_stop">Stop</string>
+    <string name="action_location">Location</string>
     <string name="action_permissions">Permissions</string>
     <string name="event_title">Wi-Fi connected</string>
 
