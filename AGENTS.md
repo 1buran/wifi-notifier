@@ -283,7 +283,9 @@ repository's files into `main`.
 GitHub Pages serves the `gh-pages` branch (source: branch `gh-pages`, folder
 `/ (root)`, enabled once in the repository settings). The client URL is the
 `repo/` subdirectory of the site, which is why `repo_url` in the config ends
-with `/repo`.
+with `/repo`. `fdroid/index.html` is copied to the branch root as a landing
+page: without it the site answers 404 at `https://1buran.github.io/wifi-notifier`
+and a broken repository is the first thing anyone opening that link sees.
 
 ### fdroidserver notes
 

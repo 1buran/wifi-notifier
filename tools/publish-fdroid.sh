@@ -120,6 +120,9 @@ find "$WORKTREE" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
 # branch keeps the index in the repo/ subdirectory.
 mkdir -p "$WORKTREE/repo"
 cp -r "$WORK_DIR/repo/." "$WORKTREE/repo/"
+# Without a page at the branch root the site answers 404 there, which looks
+# like a broken repository when the link is opened in a browser.
+cp "$PROJECT_DIR/fdroid/index.html" "$WORKTREE/index.html"
 git -C "$WORKTREE" add -A
 if git -C "$WORKTREE" diff --cached --quiet; then
     echo "==> nothing changed in the repository"

@@ -114,6 +114,10 @@ The app is published to a personal F-Droid repository served by GitHub Pages:
            38:7E:F3:1E:D6:87:BA:1D:E5:A5:16:2D:46:82:28:0C
    ```
 
+   The `/repo` suffix is part of the URL: the client asks that address for
+   `index-v1.jar`, so `https://1buran.github.io/wifi-notifier` alone is not
+   a repository. Opening it in a browser shows a small landing page instead.
+
 2. Search for **Wi-Fi Notifier** in F-Droid, install it and let F-Droid handle
    the updates.
 
@@ -149,6 +153,7 @@ fdroid/
 ├── metadata/com.buran.wifinotifier.yml the build recipe (ready for a merge
 │                                       request to the official fdroiddata)
 ├── categories.yml                      names of the categories in the index
+├── index.html                          landing page served at the site root
 └── repo-icon.svg, repo-icon.png         the repository icon
 tools/publish-fdroid.sh                 builds, re-indexes and publishes
 ```
