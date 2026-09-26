@@ -22,6 +22,12 @@ RepoType: git
 Repo: https://github.com/1buran/wifi-notifier
 
 Builds:
+  - versionName: 1.0.3
+    versionCode: 4
+    commit: v1.0.3
+    gradle:
+      - yes
+    output: app/build/outputs/apk/release/app-release-unsigned.apk
   - versionName: 1.0.2
     versionCode: 3
     commit: v1.0.2
@@ -43,8 +49,8 @@ Builds:
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: 1.0.2
-CurrentVersionCode: 3
+CurrentVersion: 1.0.3
+CurrentVersionCode: 4
 
 # There is no metadata field for the listing: fdroidserver picks up
 # fastlane/metadata/android/<locale>/ from the source tree by itself.

@@ -5,24 +5,24 @@ network your phone has just connected to. There is no screen at all — the app
 lives in the notification shade.
 
 <img src="docs/notifications.png" width="420"
-     alt="Two notifications: Wi-Fi connected / AndroidWifi and Wi-Fi / Connected: AndroidWifi with a Stop action">
+     alt="The Wi-Fi Notifier notification: Wi-Fi / Connected: AndroidWifi with a Stop action">
 
 ## What it does
 
-Two notifications, two different reasons to exist:
+One silent notification that keeps the current network up to date:
 
 | Notification | Channel | What it shows |
 | --- | --- | --- |
 | **Current network** | `Current network`, silent | The network the phone is on right now, updated on every change, with a `Stop` action that shuts the watcher down. When the name is hidden it also carries an action that opens the screen where it can be unhidden (see below) |
-| **Wi-Fi connected** | `Wi-Fi connections`, alerting | Posted the moment the phone joins a network, with the network name as its text |
+
+An earlier version also posted an alerting "Wi-Fi connected" notification on
+every new connection. It is switched off for now — the silent one already carries
+the name — but its code and its channel are kept behind
+`WifiWatchService.ALERTS_ENABLED`, so a later switch can bring the alert back.
 
 The watcher survives the app being swiped away: it runs as a foreground service,
-so the ongoing notification is always there — and that is also the only way to
-keep a background process alive on modern Android.
-
-Reconnecting to the same network after a disconnect alerts again; the very first
-launch after a restart does not, so a system-initiated process restart does not
-spam you.
+so the notification is always there — and that is also the only way to keep
+a background process alive on modern Android.
 
 ## Permissions
 
@@ -30,7 +30,7 @@ spam you.
 | --- | --- |
 | `NEARBY_WIFI_DEVICES` | The Android 13+ permission for Wi-Fi APIs. Declared **without** `neverForLocation`: with that flag the system replaces the SSID with `<unknown ssid>` |
 | `ACCESS_FINE_LOCATION` | In practice the SSID of the connected network is only handed out with location granted, on Google's own builds as well as on OEM firmware. Location services must be enabled on the device |
-| `POST_NOTIFICATIONS` | Shows the two notifications |
+| `POST_NOTIFICATIONS` | Shows the notification |
 | `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_LOCATION` | The watcher itself. The service is typed `location` on purpose, see below |
 
 All of them are asked for once, on the first launch, by an activity that has no
@@ -140,7 +140,7 @@ app/src/main/
 ├── AndroidManifest.xml                 permissions, the service and its FGS type
 ├── java/com/buran/wifinotifier/
 │   ├── MainActivity.kt                 asks for the permissions, starts the service
-│   ├── WifiWatchService.kt             the watcher and both notifications
+│   ├── WifiWatchService.kt             the watcher and its notification
 │   ├── WifiSsid.kt                     the only place that reads the SSID
 │   └── Permissions.kt                  permission checks and the "hidden" hints
 └── res/

@@ -1,0 +1,8 @@
+One notification instead of two.
+
+* The separate "Wi-Fi connected" alert is switched off: the silent ongoing
+  notification already shows the network name and updates as soon as it
+  changes, so a second notification was only clutter. The alert code is kept
+  in the app, so it can return later as an opt-in switch.
+* The ongoing notification still carries the Stop action and, when the name is
+  hidden, the one-tap action that opens the screen which unhides it.

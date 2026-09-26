@@ -207,7 +207,11 @@ class WifiWatchService : Service() {
             if (ssid != alertedSsid) {
                 alertedSsid = ssid
                 prefs.edit().putString(KEY_LAST_ALERTED, ssid).apply()
-                notifyConnected(ssid)
+                // Switched off for now: the silent ongoing notification above
+                // already carries the name, and no sound is wanted. The alert
+                // is kept in the code for a future "notify me" switch, see
+                // ALERTS_ENABLED.
+                if (ALERTS_ENABLED) notifyConnected(ssid)
             }
             return
         }
@@ -293,15 +297,22 @@ class WifiWatchService : Service() {
                 setShowBadge(false)
             }
         )
-        notifications.createNotificationChannel(
-            NotificationChannel(
-                CHANNEL_EVENTS,
-                getString(R.string.channel_events_name),
-                NotificationManager.IMPORTANCE_HIGH,
-            ).apply {
-                description = getString(R.string.channel_events_desc)
-            }
-        )
+        if (ALERTS_ENABLED) {
+            notifications.createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL_EVENTS,
+                    getString(R.string.channel_events_name),
+                    NotificationManager.IMPORTANCE_HIGH,
+                ).apply {
+                    description = getString(R.string.channel_events_desc)
+                }
+            )
+        } else {
+            // Nothing posts to the alerting channel while the alert is off, so
+            // it must not sit in the app's notification settings doing nothing.
+            // Turning ALERTS_ENABLED back on recreates it above.
+            notifications.deleteNotificationChannel(CHANNEL_EVENTS)
+        }
     }
 
     private fun startForegroundSafely() {
@@ -457,6 +468,17 @@ class WifiWatchService : Service() {
         private const val CHANNEL_EVENTS = "wifi_events"
         private const val ONGOING_ID = 1
         private const val EVENT_ID = 2
+
+        /**
+         * Whether joining a network also posts the separate alerting
+         * notification on [CHANNEL_EVENTS].
+         *
+         * Currently off: the silent ongoing notification already shows the
+         * name, and the user asked for one notification and no sound. The
+         * alerting code and its channel are deliberately kept, so bringing the
+         * alert back is this flag plus, later, a switch in the app.
+         */
+        private const val ALERTS_ENABLED = false
 
         /**
          * The real work is done by the system callbacks; polling is only

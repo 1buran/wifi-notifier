@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.0.3] - 2026-09-26
+
+### Changed
+
+- The separate alerting notification on a new connection is switched off: the
+  silent ongoing notification already shows the network name and updates on
+  every change, and one notification is enough. The alerting code and its
+  channel are kept behind `WifiWatchService.ALERTS_ENABLED` (currently `false`),
+  so a future "notify me" switch can bring them back without restoring the code
+  from history. While the alert is off the `wifi_events` channel is removed from
+  the app's notification settings instead of lingering unused.
+
 ## [v1.0.2] - 2026-09-26
 
 ### Added
@@ -80,7 +92,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   builds the signed APK, regenerates the index with fdroidserver and publishes it
   to the `gh-pages` branch that GitHub Pages serves.
 
-[Unreleased]: https://github.com/1buran/wifi-notifier/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/1buran/wifi-notifier/compare/v1.0.3...HEAD
+[v1.0.3]: https://github.com/1buran/wifi-notifier/releases/tag/v1.0.3
 [v1.0.2]: https://github.com/1buran/wifi-notifier/releases/tag/v1.0.2
 [v1.0.1]: https://github.com/1buran/wifi-notifier/releases/tag/v1.0.1
 [v1.0.0]: https://github.com/1buran/wifi-notifier/releases/tag/v1.0.0

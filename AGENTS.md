@@ -16,11 +16,12 @@ Instructions for AI agents working in this repository.
 
 Wi-Fi Notifier is a single-purpose Android app: it notices which Wi-Fi network
 the phone has connected to and reports the name of that network with
-notifications. There is no UI — the app is its two notifications.
+a notification. There is no UI — the app is its notification.
 
-- `WifiWatchService` — a foreground service that watches connectivity, keeps the
-  ongoing notification up to date and posts the alerting one. It is the whole
-  application logic.
+- `WifiWatchService` — a foreground service that watches connectivity and keeps
+  the notification up to date. It is the whole application logic. It can also
+  post a separate alerting notification on a new connection, but that is
+  switched off for now: see `ALERTS_ENABLED` in the class.
 - `WifiSsid` — the only place that asks the system for the SSID. Nothing else in
   the app touches `ConnectivityManager`, `WifiManager` or `WifiInfo`.
 - `MainActivity` — a translucent activity with no content that asks for the
@@ -197,15 +198,15 @@ adb logcat -d -s WifiWatchService:*     # "Wi-Fi state: connected:AndroidWifi"
 adb shell svc wifi disable && sleep 20
 adb logcat -d -s WifiWatchService:*     # "Wi-Fi state: disconnected (onLost)"
 
-# 4. reconnecting must alert again
+# 4. reconnecting must show the new name in the ongoing notification
 adb shell svc wifi enable && sleep 25
 adb shell dumpsys notification --noredact | grep -E "android.title|android.text"
 ```
 
 What a healthy run looks like: `Wi-Fi state: connected:AndroidWifi (service
-start)`, both notifications present (`id=1` on the `wifi_current` channel with
-the `Stop` action, `id=2` on `wifi_events`), and `dumpsys activity services
-com.buran.wifinotifier` reporting `types=00000008`
+start)`, one notification (`id=1` on the `wifi_current` channel with the `Stop`
+action; with `ALERTS_ENABLED` back on there is also `id=2` on `wifi_events`), and
+`dumpsys activity services com.buran.wifinotifier` reporting `types=00000008`
 (`FOREGROUND_SERVICE_TYPE_LOCATION`). If the state flips to `disconnected` a few
 seconds after the activity closes, the FGS type regressed — see "Domain rules".
 
@@ -222,7 +223,7 @@ Two habits that save time here:
 
 - Keep the watcher one class. `WifiWatchService` is allowed to be a couple of
   hundred lines long; extracting a "manager", a "repository" or an event bus for
-  two notifications in a private app adds indirection without a reader.
+  one notification in a private app adds indirection without a reader.
 - State transitions are explicit: `refresh()` computes one state string
   (`connected:<ssid>`, `disconnected`, `no_permission`), compares it with
   `shownState` and returns early when nothing changed. Every notification and
