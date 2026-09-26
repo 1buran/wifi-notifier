@@ -1,0 +1,1 @@
+Tells you the name of the Wi-Fi network your phone just joined

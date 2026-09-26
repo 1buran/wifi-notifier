@@ -1,0 +1,24 @@
+Wi-Fi Notifier does exactly one thing: it tells you the name of the Wi-Fi
+network your phone has connected to. There is no screen at all - the app lives
+in the notification shade.
+
+Two notifications:
+
+* a silent ongoing one that always shows the network the phone is on right now,
+  with a Stop action that shuts the watcher down;
+* an alerting one, posted the moment the phone joins a network, with the name
+  of that network as its text.
+
+Reconnecting to a network you left alerts again; a system-initiated restart of
+the app does not send a duplicate.
+
+On the first launch the app asks for three permissions: notifications, nearby
+Wi-Fi devices and location. Location is not used to determine your position:
+Android classifies the name of the connected Wi-Fi network as location data and
+reports "<unknown ssid>" without that permission. The watcher is a foreground
+service typed location for the same reason - a "while in use" location
+permission keeps working for a background service only when the service is
+declared as a location service.
+
+The app has no network access, no analytics, no advertising and no third-party
+libraries: it builds against the Android SDK alone.

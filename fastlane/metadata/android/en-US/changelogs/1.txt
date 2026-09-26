@@ -1,0 +1,8 @@
+First release.
+
+* A foreground service watches Wi-Fi connectivity and reports the name of the
+  network the phone has joined.
+* A silent ongoing notification shows the current network at all times and
+  carries a Stop action.
+* An alerting notification is posted on every new connection; returning to a
+  network that was left earlier alerts again.

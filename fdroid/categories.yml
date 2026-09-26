@@ -1,0 +1,14 @@
+# Category definitions for the repository index: without this file the F-Droid
+# client shows the raw category ids, and `fdroid lint` reports them as invalid.
+# The publish script copies this file into the workdir as
+# config/en-US/categories.yml, which is the layout fdroidserver expects: one
+# file per locale with plain strings. Only the categories actually used by the
+# app are listed, because fdroidserver warns about definitions no app uses.
+
+Connectivity:
+  name: Connectivity
+  description: Apps that manage network and device connections
+
+System:
+  name: System
+  description: Apps that change how the device works
