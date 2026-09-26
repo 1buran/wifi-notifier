@@ -13,9 +13,14 @@
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
 
     <!--
-        Fallback for devices and firmware builds that hand out the SSID only
-        when the location permission is granted.
+        Location: the practical requirement for the SSID on Android 13+.
+
+        Both are declared so that Android 12+ offers the precise/approximate
+        choice and the app can tell the two apart afterwards: with "approximate"
+        the system keeps the network name hidden, and the app asks the user to
+        switch to precise instead of pretending there is no connection.
     -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <!-- Notifications (Android 13+) -->

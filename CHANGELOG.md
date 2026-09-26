@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v1.0.1] - 2026-09-26
+
+### Fixed
+
+- The ongoing notification said "Not connected to Wi-Fi" while the phone was
+  joined to a network whose name Android hides. The watcher now tells the two
+  cases apart and names the fix: location services are off, the location
+  permission is missing, or it was granted as approximate instead of precise.
+- Granting precise location later no longer leaves the app stuck on the hidden
+  name. The system refuses the `location` foreground service type while the
+  location permission is missing, so the watcher falls back to `specialUse` —
+  and that fallback, in turn, keeps the SSID hidden. It now notices the
+  permission change and upgrades the service type back on its own.
+- Both location permissions are declared, so Android offers the
+  precise/approximate choice and the app can tell which one was granted; with
+  approximate alone the network name stays hidden.
+
+### Added
+
+- A `Permissions` action in the ongoing notification, in the states where the
+  app cannot read the name: it opens the system screen for the app permissions.
+- `Permissions` object collecting the checks, and a permission-state suffix on
+  every Wi-Fi state change in the log (`nearby=true fine=false ...`), so
+  a "not connected" report can be told apart from a permission problem.
+
 ## [v1.0.0] - 2026-09-26
 
 ### Added
@@ -33,5 +58,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   builds the signed APK, regenerates the index with fdroidserver and publishes it
   to the `gh-pages` branch that GitHub Pages serves.
 
-[Unreleased]: https://github.com/1buran/wifi-notifier/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/1buran/wifi-notifier/compare/v1.0.1...HEAD
+[v1.0.1]: https://github.com/1buran/wifi-notifier/releases/tag/v1.0.1
 [v1.0.0]: https://github.com/1buran/wifi-notifier/releases/tag/v1.0.0

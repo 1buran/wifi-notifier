@@ -23,8 +23,10 @@ notifications. There is no UI — the app is its two notifications.
   application logic.
 - `WifiSsid` — the only place that asks the system for the SSID. Nothing else in
   the app touches `ConnectivityManager`, `WifiManager` or `WifiInfo`.
-- `MainActivity` — a translucent activity with no content that asks for the three
+- `MainActivity` — a translucent activity with no content that asks for the
   runtime permissions, starts the service and calls `finish()`.
+- `Permissions` — the permission checks in one place, including the hint that
+  names what the user has to change when the network name stays hidden.
 
 Three deliberate constraints shape the code:
 
@@ -52,9 +54,13 @@ error.
   location from Wi-Fi, and the system then redacts SSID and BSSID.
 - **`ACCESS_FINE_LOCATION` is required in practice.** On paper Android 13+ hands
   out the SSID with `NEARBY_WIFI_DEVICES` alone; in reality the emulator and many
-  firmware builds return the redacted placeholder until location is granted and
-  location services are enabled. `MainActivity` therefore requests both, and
-  `hasWifiPermission()` accepts either.
+  firmware builds return the redacted placeholder until precise location is
+  granted and location services are enabled. Both location permissions are
+  declared so Android offers the precise/approximate choice, and the app can tell
+  the two apart afterwards: `ACCESS_COARSE_LOCATION` without
+  `ACCESS_FINE_LOCATION` means the user picked approximate, which keeps the name
+  hidden. `Permissions.canReadSsid()` accepts `NEARBY_WIFI_DEVICES` or precise
+  location; the "hidden" hint decides which of the two is actually missing.
 - **The foreground service must be typed `location`.** A "while in use" location
   permission keeps working for a background service only when that service is
   declared as a location service. With `specialUse` the app reads the SSID
@@ -62,6 +68,16 @@ error.
   returning null while the phone is still connected. `specialUse` is kept in the
   manifest and in `FOREGROUND_SERVICE_TYPES` purely as a fallback for the case
   when a location service cannot be started.
+- **The location type is gated by the location permission, and the two states
+  feed each other.** With no location permission at all the system rejects
+  `startForeground(..., FOREGROUND_SERVICE_TYPE_LOCATION)` with a
+  `SecurityException` ("requires any of COARSE/FINE"), the service falls back to
+  `specialUse`, and a `specialUse` service may not read the SSID at all — so the
+  app would stay on "name hidden" forever. `refresh()` therefore retries the
+  preferred type whenever the permission state changes, and the state snapshot is
+  the full `Permissions.describe()` string rather than a boolean: granting precise
+  location does not change "some Wi-Fi permission is granted", it only changes the
+  fine/coarse pair.
 - **Update the ongoing notification with `startForeground`, not with
   `NotificationManager.notify`.** `notify()` with the same id does not update
   the notification of a running foreground service; the shade keeps showing the

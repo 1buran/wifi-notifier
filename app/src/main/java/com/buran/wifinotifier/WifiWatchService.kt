@@ -1,6 +1,5 @@
 package com.buran.wifinotifier
 
-import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -8,16 +7,17 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.SharedPreferences
-import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.net.Uri
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 
@@ -44,11 +44,20 @@ class WifiWatchService : Service() {
     /** Network we have already notified about, so we do not repeat ourselves. */
     private var alertedSsid: String? = null
 
-    /** Last known value of "the Wi-Fi permission is granted". */
-    private var permissionSnapshot: Boolean? = null
+    /**
+     * The permission state as a string, from [Permissions.describe]: any change
+     * in it (precise location appearing, location services going off) has to be
+     * noticed, not just "some Wi-Fi permission is granted".
+     */
+    private var permissionSnapshot: String? = null
 
     /** Wi-Fi networks the system currently reports as connected. */
     private val wifiNetworks = ConcurrentHashMap<Network, String>()
+
+    /** The foreground service type that worked, and the text it shows. */
+    private var foregroundType: Int? = null
+    private var ongoingText: String? = null
+    private var ongoingHasSettingsAction = false
 
     /**
      * Safety net for the case when the system did not deliver a callback,
@@ -130,41 +139,68 @@ class WifiWatchService : Service() {
     }
 
     private fun refresh(reason: String) {
-        val hasPermission = hasWifiPermission()
-        if (permissionSnapshot != null && permissionSnapshot != hasPermission) {
-            Log.i(TAG, "the permission set changed, re-registering the network callback")
+        val canReadSsid = Permissions.canReadSsid(this)
+        val permissionState = Permissions.describe(this)
+        if (permissionSnapshot != null && permissionSnapshot != permissionState) {
+            Log.i(TAG, "permissions changed: $permissionSnapshot -> $permissionState")
             registerWifiCallback()
+            // With no location permission the location type cannot be started
+            // and the service runs as specialUse, which in turn keeps the SSID
+            // hidden. Upgrade back to the preferred type as soon as the
+            // permission appears, or the app would stay stuck on "name hidden"
+            // until it is restarted by hand.
+            if (foregroundType != FOREGROUND_SERVICE_TYPES.first()) {
+                Log.i(TAG, "retrying the preferred foreground service type")
+                startForegroundWith(ongoingText ?: getString(R.string.state_detecting), ongoingHasSettingsAction)
+            }
         }
-        permissionSnapshot = hasPermission
+        permissionSnapshot = permissionState
 
-        val ssid = if (hasPermission) currentSsid() else null
+        val ssid = currentSsid()
+        // Joined to a network while the name stays unreadable: the user has to
+        // fix something, and telling them "not connected" would be a lie.
+        val associated = ssid == null && WifiSsid.isAssociated(this)
 
         val state = when {
-            !hasPermission -> STATE_NO_PERMISSION
             ssid != null -> "$STATE_CONNECTED:$ssid"
+            associated && !canReadSsid -> STATE_NO_PERMISSION
+            associated -> STATE_NAME_HIDDEN
             else -> STATE_DISCONNECTED
         }
         if (state == shownState) return
         shownState = state
-        Log.i(TAG, "Wi-Fi state: $state ($reason)")
+        Log.i(TAG, "Wi-Fi state: $state ($reason) [${Permissions.describe(this)}]")
 
-        if (ssid == null) {
-            // Disconnected: joining the next network must alert again.
-            alertedSsid = null
-            prefs.edit().remove(KEY_LAST_ALERTED).apply()
-            updateOngoing(getString(if (hasPermission) R.string.state_disconnected else R.string.state_no_permission))
-        } else {
+        if (ssid != null) {
             updateOngoing(getString(R.string.state_connected, ssid))
             if (ssid != alertedSsid) {
                 alertedSsid = ssid
                 prefs.edit().putString(KEY_LAST_ALERTED, ssid).apply()
                 notifyConnected(ssid)
             }
+            return
+        }
+
+        // No network name: joining the next one must alert again.
+        alertedSsid = null
+        prefs.edit().remove(KEY_LAST_ALERTED).apply()
+
+        val hint = getString(Permissions.hiddenSsidHint(this))
+        when (state) {
+            STATE_NO_PERMISSION -> updateOngoing(
+                getString(R.string.state_no_permission, hint),
+                withSettingsAction = true,
+            )
+            STATE_NAME_HIDDEN -> updateOngoing(
+                getString(R.string.state_name_hidden, hint),
+                withSettingsAction = true,
+            )
+            else -> updateOngoing(getString(R.string.state_disconnected))
         }
     }
 
     private fun currentSsid(): String? {
-        WifiSsid.current(this)?.let { return it }
+        WifiSsid.readableSsid(this)?.let { return it }
         // The active network may be the mobile one while Wi-Fi is joined
         // alongside it, so we also look at the Wi-Fi networks the callbacks
         // have reported. Every entry is checked against the system first,
@@ -179,10 +215,6 @@ class WifiWatchService : Service() {
         }
         return null
     }
-
-    private fun hasWifiPermission(): Boolean =
-        checkSelfPermission(Manifest.permission.NEARBY_WIFI_DEVICES) == PackageManager.PERMISSION_GRANTED ||
-            checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
     // -------------------------------------------------------------- notifications
 
@@ -224,25 +256,36 @@ class WifiWatchService : Service() {
      * If such a service cannot be started we fall back to specialUse, and the
      * app keeps working while its screen is open.
      */
-    private fun startForegroundWith(text: String) {
+    private fun startForegroundWith(text: String, withSettingsAction: Boolean = false) {
         Log.i(TAG, "ongoing notification: $text")
-        val notification = buildOngoing(text)
+        val notification = buildOngoing(text, withSettingsAction)
+        ongoingText = text
+        ongoingHasSettingsAction = withSettingsAction
 
-        for (type in FOREGROUND_SERVICE_TYPES) {
+        // The location type is rejected while the user has not granted location
+        // at all ("requires any of COARSE/FINE"), and that is an expected state:
+        // complain loudly only when no type works. The fallback keeps the
+        // service alive so it can explain what to fix.
+        FOREGROUND_SERVICE_TYPES.forEachIndexed { index, type ->
             try {
                 startForeground(ONGOING_ID, notification, type)
+                foregroundType = type
                 return
             } catch (e: Exception) {
-                Log.w(TAG, "could not start a foreground service of type $type", e)
+                if (index == FOREGROUND_SERVICE_TYPES.lastIndex) {
+                    Log.e(TAG, "could not become a foreground service", e)
+                } else {
+                    Log.w(TAG, "foreground service type $type is not available: ${e.message}")
+                }
             }
         }
-        Log.e(TAG, "could not become a foreground service")
         stopSelf()
     }
 
-    private fun updateOngoing(text: String) = startForegroundWith(text)
+    private fun updateOngoing(text: String, withSettingsAction: Boolean = false) =
+        startForegroundWith(text, withSettingsAction)
 
-    private fun buildOngoing(text: String): Notification =
+    private fun buildOngoing(text: String, withSettingsAction: Boolean): Notification =
         Notification.Builder(this, CHANNEL_CURRENT)
             .setSmallIcon(R.drawable.ic_stat_wifi)
             .setContentTitle(getString(R.string.ongoing_title))
@@ -257,6 +300,17 @@ class WifiWatchService : Service() {
                     stopPendingIntent(),
                 ).build()
             )
+            .apply {
+                if (withSettingsAction) {
+                    addAction(
+                        Notification.Action.Builder(
+                            Icon.createWithResource(this@WifiWatchService, R.drawable.ic_stat_wifi),
+                            getString(R.string.action_permissions),
+                            settingsPendingIntent(),
+                        ).build()
+                    )
+                }
+            }
             .build()
 
     private fun notifyConnected(ssid: String) {
@@ -276,6 +330,20 @@ class WifiWatchService : Service() {
         return PendingIntent.getService(
             this,
             0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    /** Opens the system screen where the app permissions can be changed. */
+    private fun settingsPendingIntent(): PendingIntent {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", packageName, null),
+        )
+        return PendingIntent.getActivity(
+            this,
+            1,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -301,6 +369,7 @@ class WifiWatchService : Service() {
         private const val KEY_LAST_ALERTED = "last_alerted_ssid"
 
         private const val STATE_NO_PERMISSION = "no_permission"
+        private const val STATE_NAME_HIDDEN = "name_hidden"
         private const val STATE_DISCONNECTED = "disconnected"
         private const val STATE_CONNECTED = "connected"
 

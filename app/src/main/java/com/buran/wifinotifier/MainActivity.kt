@@ -3,7 +3,6 @@ package com.buran.wifinotifier
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Toast
 
@@ -57,16 +56,14 @@ class MainActivity : Activity() {
      * Location is requested together with NEARBY_WIFI_DEVICES: on Android 13+
      * the network name is officially available with NEARBY_WIFI_DEVICES alone,
      * but in practice (and on many firmware builds) the system returns the SSID
-     * only when the location permission is granted as well.
+     * only when the precise location permission is granted as well. Both
+     * location permissions are declared so the system offers the
+     * precise/approximate choice; picking approximate leaves the name hidden,
+     * and the next launch asks for precise again.
      */
-    private fun neededPermissions(): List<String> = listOf(
-        Manifest.permission.POST_NOTIFICATIONS,
-        Manifest.permission.NEARBY_WIFI_DEVICES,
-        Manifest.permission.ACCESS_FINE_LOCATION,
-    )
+    private fun neededPermissions(): List<String> = Permissions.required()
 
-    private fun isGranted(permission: String): Boolean =
-        checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+    private fun isGranted(permission: String): Boolean = Permissions.isGranted(this, permission)
 
     private fun toast(text: String) {
         Toast.makeText(this, text, Toast.LENGTH_LONG).show()

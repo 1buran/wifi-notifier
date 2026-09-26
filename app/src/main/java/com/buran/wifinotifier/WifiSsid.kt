@@ -20,10 +20,14 @@ internal object WifiSsid {
     }
 
     /**
-     * Name of the network the phone is connected to, or null when there is no
-     * connection (or the system hides the name because of a missing permission).
+     * Name of the network the phone is joined to, or null when there is no
+     * connection *or* when the system hides the name (a permission is missing,
+     * or the user granted approximate location instead of precise).
+     *
+     * [isAssociated] tells the two apart: null from here plus `isAssociated`
+     * means the phone is on a network whose name it refuses to say.
      */
-    fun current(context: Context): String? {
+    fun readableSsid(context: Context): String? {
         // The usual path: Wi-Fi is the active network and the system tells us
         // the SSID right away.
         val cm = context.getSystemService(ConnectivityManager::class.java)
@@ -33,22 +37,46 @@ internal object WifiSsid {
         // The active network is not always Wi-Fi: a phone may sit on Ethernet
         // or mobile data with a Wi-Fi network joined alongside, and an emulator
         // reports its virtual Wi-Fi this way as well.
-        return connectedWifi(context)
+        return associatedSsid(context)
     }
 
     /**
-     * The SSID is taken from WifiManager only when Wi-Fi is really associated:
+     * Whether the phone is joined to a Wi-Fi network at all, even when the name
+     * cannot be read.
+     *
+     * `WifiInfo.supplicantState` is not redacted the way the SSID is, so it
+     * answers the question that the name alone cannot.
+     */
+    fun isAssociated(context: Context): Boolean {
+        val cm = context.getSystemService(ConnectivityManager::class.java)
+        val caps = runCatching { cm?.getNetworkCapabilities(cm.activeNetwork) }.getOrNull()
+        if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true) return true
+
+        return wifiInfo(context)?.supplicantState == SupplicantState.COMPLETED
+    }
+
+    /**
+     * The SSID from WifiManager is taken only when Wi-Fi is really associated:
      * [WifiManager.getConnectionInfo] keeps the last network around after
      * a disconnect, so the name alone would be misleading.
      */
-    private fun connectedWifi(context: Context): String? {
+    private fun associatedSsid(context: Context): String? {
+        val info = wifiInfo(context) ?: return null
+        if (info.supplicantState != SupplicantState.COMPLETED) return null
+        return sanitize(info.ssid)
+    }
+
+    /**
+     * [WifiManager.getConnectionInfo] is deprecated but remains the only way to
+     * learn the association state on builds where the active network is not
+     * Wi-Fi, and its supplicant state is not redacted.
+     */
+    private fun wifiInfo(context: Context): WifiInfo? {
         val wm = context.getSystemService(WifiManager::class.java) ?: return null
         if (runCatching { wm.isWifiEnabled }.getOrDefault(false) != true) return null
 
         @Suppress("DEPRECATION")
-        val info = runCatching { wm.connectionInfo }.getOrNull() ?: return null
-        if (info.supplicantState != SupplicantState.COMPLETED) return null
-        return sanitize(info.ssid)
+        return runCatching { wm.connectionInfo }.getOrNull()
     }
 
     /**

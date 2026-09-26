@@ -24,10 +24,10 @@ android {
         applicationId = "com.buran.wifinotifier"
         minSdk = 33
         targetSdk = 36
-        versionCode = 1
+        versionCode = 2
         // Kept in step with the git tag: F-Droid matches v1.0.0 against 1.0.0
         // to notice a new release.
-        versionName = "1.0.0"
+        versionName = "1.0.1"
     }
 
     signingConfigs {

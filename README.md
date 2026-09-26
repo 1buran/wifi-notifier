@@ -141,7 +141,8 @@ app/src/main/
 ├── java/com/buran/wifinotifier/
 │   ├── MainActivity.kt                 asks for the permissions, starts the service
 │   ├── WifiWatchService.kt             the watcher and both notifications
-│   └── WifiSsid.kt                     the only place that reads the SSID
+│   ├── WifiSsid.kt                     the only place that reads the SSID
+│   └── Permissions.kt                  permission checks and the "hidden" hints
 └── res/
     ├── values/strings.xml              all user-facing text (English)
     ├── drawable/ic_stat_wifi.xml       notification icon
@@ -157,6 +158,25 @@ fdroid/
 └── repo-icon.svg, repo-icon.png         the repository icon
 tools/publish-fdroid.sh                 builds, re-indexes and publishes
 ```
+
+## When the name is hidden
+
+Android hands out the name of the connected network only to an app that holds
+the *precise* location permission: "nearby Wi-Fi devices" alone is not enough on
+most builds, and "approximate" location is not either. The app says so instead of
+pretending there is no connection, and the `Permissions` action in the
+notification opens the screen where it can be fixed.
+
+| What the notification says | What to do |
+| --- | --- |
+| "grant the location permission" | Give the app location access |
+| "switch the location permission from approximate to precise" | App info → Permissions → Location → **Precise** |
+| "turn location services on" | Turn the system location toggle on |
+
+The watcher picks the change up on its own within twenty seconds, without a
+restart: the foreground service type has to be `location` for the system to hand
+the name over, and while the permission is missing the system refuses to start
+that type at all, so the app retries it as soon as the permission appears.
 
 ## Limitations
 

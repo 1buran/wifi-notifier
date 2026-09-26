@@ -1,0 +1,17 @@
+The app no longer claims "Not connected to Wi-Fi" when the phone is on
+a network whose name Android keeps hidden.
+
+* A new state tells the two apart: "Wi-Fi is connected, but the network
+  name is hidden", with the exact thing to fix — location services off,
+  the location permission missing, or the permission granted as
+  approximate instead of precise.
+* The ongoing notification carries a Permissions action in those states
+  and opens the app's permission screen.
+* Both location permissions are declared now, so the system offers the
+  precise/approximate choice and the app can tell which one was picked.
+* Granting precise location later is noticed: the watcher upgrades its
+  foreground service back to the location type by itself (with the
+  approximate or missing permission the system refuses that type, and
+  without it the name stays hidden forever).
+* The log now records the permission state with every change of the Wi-Fi
+  state, so a bug report can be told apart from a permission problem.
