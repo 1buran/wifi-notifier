@@ -127,7 +127,9 @@ git -C "$WORKTREE" add -A
 if git -C "$WORKTREE" diff --cached --quiet; then
     echo "==> nothing changed in the repository"
 else
-    VERSION="$(awk '/versionName:/{print $2; exit}' "$PROJECT_DIR/fdroid/metadata/$APP_ID.yml" | tr -d ' ')"
+    # $NF, not $2: the YAML line is "- versionName: 1.0.2", so the second
+    # field is the key and the value is the last one.
+    VERSION="$(awk '/versionName:/{print $NF; exit}' "$PROJECT_DIR/fdroid/metadata/$APP_ID.yml" | tr -d ' ')"
     git -C "$WORKTREE" commit --quiet -m "chore: publish $APP_ID $VERSION to the f-droid repository"
     git -C "$WORKTREE" push --quiet origin "$PAGES_BRANCH"
     echo "==> pushed $PAGES_BRANCH; the app is now available at the repository URL"
